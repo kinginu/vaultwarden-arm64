@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Vaultwarden 自動更新スクリプト
-# cron または手動で実行。新しいリリースがあればバイナリを置き換えてサービスを再起動。
+# Vaultwarden auto-update script
+# Run via cron or manually. Replaces the binary and restarts the service
+# if a newer release is available.
 #
-# 使い方 (手動):
+# Usage (manual):
 #   sudo GITHUB_REPO="YOUR_USERNAME/vaultwarden" bash update.sh
 # =============================================================================
 set -euo pipefail
 
-# ── 設定 ──────────────────────────────────────────────────────────────────────
+# -- Configuration ------------------------------------------------------------
 GITHUB_REPO="${GITHUB_REPO:-YOUR_USERNAME/vaultwarden}"
 INSTALL_DIR="/opt/vaultwarden"
-DATA_DIR="/var/lib/vaultwarden"
 SERVICE_NAME="vaultwarden"
 BINARY_PATH="${INSTALL_DIR}/vaultwarden"
 VERSION_FILE="${INSTALL_DIR}/.version"
 LOG_DIR="/var/log/vaultwarden"
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 mkdir -p "$LOG_DIR"
 LOGFILE="${LOG_DIR}/update.log"
@@ -29,30 +29,30 @@ log() {
 
 die() { log "ERROR: $*"; exit 1; }
 
-[[ $EUID -ne 0 ]] && die "root 権限が必要です。sudo で実行してください。"
+[[ $EUID -ne 0 ]] && die "Must be run as root. Use sudo."
 
-# ── 最新リリース情報を取得 ─────────────────────────────────────────────────────
-log "リリース情報を取得中: ${GITHUB_REPO}"
+# -- Fetch latest release info ------------------------------------------------
+log "Checking for updates: ${GITHUB_REPO}"
 RELEASE_JSON=$(curl -sf \
   --retry 3 --retry-delay 5 \
   "https://api.github.com/repos/${GITHUB_REPO}/releases/latest") \
-  || die "GitHub API への接続に失敗しました。"
+  || die "Failed to reach GitHub API."
 
 LATEST=$(echo "$RELEASE_JSON" | jq -r '.tag_name')
-[[ -z "$LATEST" || "$LATEST" == "null" ]] && die "タグ名を取得できませんでした。"
+[[ -z "$LATEST" || "$LATEST" == "null" ]] && die "Could not retrieve tag name."
 
-# ── 現在のバージョンと比較 ─────────────────────────────────────────────────────
+# -- Compare with current version ---------------------------------------------
 CURRENT="none"
 [[ -f "$VERSION_FILE" ]] && CURRENT=$(cat "$VERSION_FILE")
 
 if [[ "$LATEST" == "$CURRENT" ]]; then
-  log "既に最新版です: ${CURRENT}"
+  log "Already on latest version: ${CURRENT}"
   exit 0
 fi
 
-log "更新あり: ${CURRENT} → ${LATEST}"
+log "Update available: ${CURRENT} -> ${LATEST}"
 
-# ── バイナリ URL を抽出 ────────────────────────────────────────────────────────
+# -- Resolve asset URLs -------------------------------------------------------
 BINARY_URL=$(echo "$RELEASE_JSON" | jq -r \
   '.assets[] | select(.name | test("aarch64-linux\\.tar\\.gz$")) | .browser_download_url')
 SHA256_URL=$(echo "$RELEASE_JSON" | jq -r \
@@ -61,63 +61,62 @@ WEB_URL=$(echo "$RELEASE_JSON" | jq -r \
   '.assets[] | select(.name | test("bw_web_.*\\.tar\\.gz$")) | .browser_download_url')
 
 [[ -z "$BINARY_URL" || "$BINARY_URL" == "null" ]] && \
-  die "aarch64 バイナリアセットが見つかりません。リリースを確認してください。"
+  die "aarch64 binary asset not found. Check the release page."
 
-# ── ダウンロード & チェックサム検証 ───────────────────────────────────────────
+# -- Download and verify ------------------------------------------------------
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
-log "バイナリをダウンロード..."
+log "Downloading binary..."
 curl -sL --retry 3 "$BINARY_URL" -o "$TMPDIR/vaultwarden.tar.gz"
 
 if [[ -n "$SHA256_URL" && "$SHA256_URL" != "null" ]]; then
-  log "チェックサムを検証..."
+  log "Verifying checksum..."
   curl -sL "$SHA256_URL" -o "$TMPDIR/vaultwarden.tar.gz.sha256"
-  # sha256 ファイルのパスをカレントに合わせる
   (cd "$TMPDIR" && sed -i "s|dist/||g" vaultwarden.tar.gz.sha256 && \
     sha256sum -c vaultwarden.tar.gz.sha256) \
-    || die "チェックサム検証に失敗しました！ダウンロードを確認してください。"
-  log "チェックサム OK"
+    || die "Checksum verification failed. Aborting update."
+  log "Checksum OK"
 fi
 
-log "アーカイブを展開..."
+log "Extracting archive..."
 tar -xzf "$TMPDIR/vaultwarden.tar.gz" -C "$TMPDIR"
-[[ ! -f "$TMPDIR/vaultwarden" ]] && die "アーカイブに vaultwarden バイナリが含まれていません。"
+[[ ! -f "$TMPDIR/vaultwarden" ]] && die "Binary not found in archive."
 
-# ── サービス停止 → バイナリ入れ替え → サービス起動 ──────────────────────────
-log "サービスを停止..."
+# -- Stop service, swap binary, start service ---------------------------------
+log "Stopping service..."
 systemctl stop "$SERVICE_NAME" || true
 
-log "バイナリを更新..."
-cp "$BINARY_PATH" "${BINARY_PATH}.bak.${CURRENT}" 2>/dev/null || true  # ロールバック用バックアップ
+log "Installing new binary..."
+cp "$BINARY_PATH" "${BINARY_PATH}.bak.${CURRENT}" 2>/dev/null || true  # rollback backup
 install -m 755 "$TMPDIR/vaultwarden" "$BINARY_PATH"
 echo "$LATEST" > "$VERSION_FILE"
 
-# ── web vault も更新 (オプション) ─────────────────────────────────────────────
+# -- Update web vault (if included in release) --------------------------------
 if [[ -n "$WEB_URL" && "$WEB_URL" != "null" ]]; then
-  log "Web vault を更新..."
+  log "Updating web vault..."
   curl -sL --retry 3 "$WEB_URL" -o "$TMPDIR/bw_web.tar.gz"
   rm -rf "${INSTALL_DIR}/web-vault"
   tar -xzf "$TMPDIR/bw_web.tar.gz" -C "$INSTALL_DIR"
-  log "Web vault を更新しました。"
+  log "Web vault updated."
 fi
 
-log "サービスを起動..."
+log "Starting service..."
 systemctl start "$SERVICE_NAME"
 
-# ── ヘルスチェック ────────────────────────────────────────────────────────────
+# -- Health check and rollback on failure -------------------------------------
 sleep 3
 if systemctl is-active --quiet "$SERVICE_NAME"; then
-  log "✓ 更新成功: ${CURRENT} → ${LATEST}"
-  # 古いバックアップを削除 (最新 3 世代を保持)
+  log "Update successful: ${CURRENT} -> ${LATEST}"
+  # Keep only the 3 most recent backups
   ls -t "${BINARY_PATH}.bak."* 2>/dev/null | tail -n +4 | xargs rm -f || true
 else
-  log "ERROR: サービスの起動に失敗しました。ロールバックします..."
+  log "ERROR: Service failed to start. Rolling back..."
   if [[ -f "${BINARY_PATH}.bak.${CURRENT}" ]]; then
     install -m 755 "${BINARY_PATH}.bak.${CURRENT}" "$BINARY_PATH"
     echo "$CURRENT" > "$VERSION_FILE"
     systemctl start "$SERVICE_NAME" || true
-    log "ロールバック完了: ${LATEST} → ${CURRENT}"
+    log "Rollback complete: ${LATEST} -> ${CURRENT}"
   fi
-  die "更新に失敗しました。journalctl -u ${SERVICE_NAME} を確認してください。"
+  die "Update failed. Check: journalctl -u ${SERVICE_NAME}"
 fi
