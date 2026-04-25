@@ -38,7 +38,7 @@ if command -v apt-get &>/dev/null; then
   apt-get install -y --no-install-recommends curl jq tar gzip ca-certificates
 elif command -v dnf &>/dev/null; then
   # Amazon Linux ships curl-minimal which conflicts with curl; skip it if already present
-  PKGS="jq tar gzip ca-certificates"
+  PKGS="jq tar gzip ca-certificates cronie"
   command -v curl &>/dev/null || PKGS="curl $PKGS"
   dnf install -y $PKGS
 elif command -v yum &>/dev/null; then
