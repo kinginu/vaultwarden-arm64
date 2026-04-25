@@ -2,8 +2,7 @@ name: Sync Upstream & Trigger Build
 
 on:
   schedule:
-    # 毎日 UTC 02:00 (JST 11:00) に実行
-    - cron: '0 2 * * *'
+    - cron: '0 2 * * *'   # daily at 02:00 UTC
   workflow_dispatch:
 
 jobs:
@@ -18,9 +17,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # GITHUB_TOKEN では他のワークフローをトリガーできないため
-          # Settings > Secrets に PAT (workflow スコープ付き) を登録する
-          # 名前: SYNC_TOKEN
+          # GITHUB_TOKEN cannot trigger other workflows by design.
+          # Register a PAT with Contents + Workflows write access
+          # as a secret named SYNC_TOKEN.
           token: ${{ secrets.SYNC_TOKEN }}
 
       - name: Configure git
@@ -39,22 +38,20 @@ jobs:
           DEFAULT_BRANCH=$(git remote show upstream | awk '/HEAD branch/ {print $NF}')
           echo "Syncing branch: ${DEFAULT_BRANCH}"
           git checkout "${DEFAULT_BRANCH}"
-          # upstream の変更を fast-forward でマージ
           git merge "upstream/${DEFAULT_BRANCH}" --ff-only \
             || { echo "Fast-forward failed, trying rebase"; git rebase "upstream/${DEFAULT_BRANCH}"; }
           git push origin "${DEFAULT_BRANCH}"
 
       - name: Push new upstream tags (triggers build-release workflow)
         run: |
-          # upstream の v* タグ一覧
-          UPSTREAM_TAGS=$(git ls-remote --tags upstream 'refs/tags/v*' \
+          # vaultwarden tags have no 'v' prefix (e.g. 1.35.7)
+          UPSTREAM_TAGS=$(git ls-remote --tags upstream 'refs/tags/[0-9]*' \
             | awk '{print $2}' \
             | sed 's|refs/tags/||' \
             | grep -v '\^{}' \
             | sort -V)
 
-          # fork 側の既存タグ一覧
-          FORK_TAGS=$(git ls-remote --tags origin 'refs/tags/v*' \
+          FORK_TAGS=$(git ls-remote --tags origin 'refs/tags/[0-9]*' \
             | awk '{print $2}' \
             | sed 's|refs/tags/||' \
             | grep -v '\^{}')
