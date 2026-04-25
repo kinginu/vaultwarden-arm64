@@ -37,9 +37,14 @@ if command -v apt-get &>/dev/null; then
   apt-get update -qq
   apt-get install -y --no-install-recommends curl jq tar gzip ca-certificates
 elif command -v dnf &>/dev/null; then
-  dnf install -y curl jq tar gzip ca-certificates
+  # Amazon Linux ships curl-minimal which conflicts with curl; skip it if already present
+  PKGS="jq tar gzip ca-certificates"
+  command -v curl &>/dev/null || PKGS="curl $PKGS"
+  dnf install -y $PKGS
 elif command -v yum &>/dev/null; then
-  yum install -y curl jq tar gzip ca-certificates
+  PKGS="jq tar gzip ca-certificates"
+  command -v curl &>/dev/null || PKGS="curl $PKGS"
+  yum install -y $PKGS
 else
   die "No supported package manager found (apt-get / dnf / yum)."
 fi
