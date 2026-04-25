@@ -1,0 +1,83 @@
+name: Sync Upstream & Trigger Build
+
+on:
+  schedule:
+    # 毎日 UTC 02:00 (JST 11:00) に実行
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    name: Sync from dani-garcia/vaultwarden
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout fork (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # GITHUB_TOKEN では他のワークフローをトリガーできないため
+          # Settings > Secrets に PAT (workflow スコープ付き) を登録する
+          # 名前: SYNC_TOKEN
+          token: ${{ secrets.SYNC_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/dani-garcia/vaultwarden.git
+
+      - name: Fetch upstream (tags included)
+        run: git fetch upstream --tags --prune --prune-tags
+
+      - name: Sync default branch
+        run: |
+          DEFAULT_BRANCH=$(git remote show upstream | awk '/HEAD branch/ {print $NF}')
+          echo "Syncing branch: ${DEFAULT_BRANCH}"
+          git checkout "${DEFAULT_BRANCH}"
+          # upstream の変更を fast-forward でマージ
+          git merge "upstream/${DEFAULT_BRANCH}" --ff-only \
+            || { echo "Fast-forward failed, trying rebase"; git rebase "upstream/${DEFAULT_BRANCH}"; }
+          git push origin "${DEFAULT_BRANCH}"
+
+      - name: Push new upstream tags (triggers build-release workflow)
+        run: |
+          # upstream の v* タグ一覧
+          UPSTREAM_TAGS=$(git ls-remote --tags upstream 'refs/tags/v*' \
+            | awk '{print $2}' \
+            | sed 's|refs/tags/||' \
+            | grep -v '\^{}' \
+            | sort -V)
+
+          # fork 側の既存タグ一覧
+          FORK_TAGS=$(git ls-remote --tags origin 'refs/tags/v*' \
+            | awk '{print $2}' \
+            | sed 's|refs/tags/||' \
+            | grep -v '\^{}')
+
+          NEW_TAGS=()
+          for tag in $UPSTREAM_TAGS; do
+            if ! echo "${FORK_TAGS}" | grep -qx "${tag}"; then
+              NEW_TAGS+=("${tag}")
+            fi
+          done
+
+          if [ ${#NEW_TAGS[@]} -eq 0 ]; then
+            echo "No new tags found. Fork is up-to-date."
+            exit 0
+          fi
+
+          echo "New tags to push: ${NEW_TAGS[*]}"
+          for tag in "${NEW_TAGS[@]}"; do
+            echo "  Pushing tag: ${tag}"
+            git push origin "refs/tags/${tag}"
+          done
+
+      - name: Summary
+        run: |
+          echo "### Sync complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "Fork is now in sync with upstream dani-garcia/vaultwarden." >> "$GITHUB_STEP_SUMMARY"

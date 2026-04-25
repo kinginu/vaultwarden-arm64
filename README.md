@@ -1,146 +1,194 @@
-![Vaultwarden Logo](./resources/vaultwarden-logo-auto.svg)
+# Vaultwarden ARM64 — Automated builds for AWS t4g
 
-An alternative server implementation of the Bitwarden Client API, written in Rust and compatible with [official Bitwarden clients](https://bitwarden.com/download/) [[disclaimer](#disclaimer)], perfect for self-hosted deployment where running the official resource-heavy service might not be ideal.
+A fork of [dani-garcia/vaultwarden](https://github.com/dani-garcia/vaultwarden) that uses GitHub Actions to automatically build and release **aarch64 (ARM64)** binaries for AWS **t4g.nano** / Graviton instances.
 
 ---
 
-[![GitHub Release](https://img.shields.io/github/release/dani-garcia/vaultwarden.svg?style=for-the-badge&logo=vaultwarden&color=005AA4)](https://github.com/dani-garcia/vaultwarden/releases/latest)
-[![ghcr.io Pulls](https://img.shields.io/badge/dynamic/json?style=for-the-badge&logo=github&logoColor=fff&color=005AA4&url=https%3A%2F%2Fipitio.github.io%2Fbackage%2Fdani-garcia%2Fvaultwarden%2Fvaultwarden.json&query=%24.downloads&label=ghcr.io%20pulls&cacheSeconds=14400)](https://github.com/dani-garcia/vaultwarden/pkgs/container/vaultwarden)
-[![Docker Pulls](https://img.shields.io/docker/pulls/vaultwarden/server.svg?style=for-the-badge&logo=docker&logoColor=fff&color=005AA4&label=docker.io%20pulls)](https://hub.docker.com/r/vaultwarden/server)
-[![Quay.io](https://img.shields.io/badge/quay.io-download-005AA4?style=for-the-badge&logo=redhat&cacheSeconds=14400)](https://quay.io/repository/vaultwarden/server) <br>
-[![Contributors](https://img.shields.io/github/contributors-anon/dani-garcia/vaultwarden.svg?style=flat-square&logo=vaultwarden&color=005AA4)](https://github.com/dani-garcia/vaultwarden/graphs/contributors)
-[![Forks](https://img.shields.io/github/forks/dani-garcia/vaultwarden.svg?style=flat-square&logo=github&logoColor=fff&color=005AA4)](https://github.com/dani-garcia/vaultwarden/network/members)
-[![Stars](https://img.shields.io/github/stars/dani-garcia/vaultwarden.svg?style=flat-square&logo=github&logoColor=fff&color=005AA4)](https://github.com/dani-garcia/vaultwarden/stargazers)
-[![Issues Open](https://img.shields.io/github/issues/dani-garcia/vaultwarden.svg?style=flat-square&logo=github&logoColor=fff&color=005AA4&cacheSeconds=300)](https://github.com/dani-garcia/vaultwarden/issues)
-[![Issues Closed](https://img.shields.io/github/issues-closed/dani-garcia/vaultwarden.svg?style=flat-square&logo=github&logoColor=fff&color=005AA4&cacheSeconds=300)](https://github.com/dani-garcia/vaultwarden/issues?q=is%3Aissue+is%3Aclosed)
-[![AGPL-3.0 Licensed](https://img.shields.io/github/license/dani-garcia/vaultwarden.svg?style=flat-square&logo=vaultwarden&color=944000&cacheSeconds=14400)](https://github.com/dani-garcia/vaultwarden/blob/main/LICENSE.txt) <br>
-[![Dependency Status](https://img.shields.io/badge/dynamic/xml?url=https%3A%2F%2Fdeps.rs%2Frepo%2Fgithub%2Fdani-garcia%2Fvaultwarden%2Fstatus.svg&query=%2F*%5Blocal-name()%3D'svg'%5D%2F*%5Blocal-name()%3D'g'%5D%5B2%5D%2F*%5Blocal-name()%3D'text'%5D%5B4%5D&style=flat-square&logo=rust&label=dependencies&color=005AA4)](https://deps.rs/repo/github/dani-garcia/vaultwarden)
-[![GHA Release](https://img.shields.io/github/actions/workflow/status/dani-garcia/vaultwarden/release.yml?style=flat-square&logo=github&logoColor=fff&label=Release%20Workflow)](https://github.com/dani-garcia/vaultwarden/actions/workflows/release.yml)
-[![GHA Build](https://img.shields.io/github/actions/workflow/status/dani-garcia/vaultwarden/build.yml?style=flat-square&logo=github&logoColor=fff&label=Build%20Workflow)](https://github.com/dani-garcia/vaultwarden/actions/workflows/build.yml) <br>
-[![Matrix Chat](https://img.shields.io/matrix/vaultwarden:matrix.org.svg?style=flat-square&logo=matrix&logoColor=fff&color=953B00&cacheSeconds=14400)](https://matrix.to/#/#vaultwarden:matrix.org)
-[![GitHub Discussions](https://img.shields.io/github/discussions/dani-garcia/vaultwarden?style=flat-square&logo=github&logoColor=fff&color=953B00&cacheSeconds=300)](https://github.com/dani-garcia/vaultwarden/discussions)
-[![Discourse Discussions](https://img.shields.io/discourse/topics?server=https%3A%2F%2Fvaultwarden.discourse.group%2F&style=flat-square&logo=discourse&color=953B00)](https://vaultwarden.discourse.group/)
+## Overview
 
-> [!IMPORTANT]
-> **When using this server, please report any bugs or suggestions directly to us (see [Get in touch](#get-in-touch)), regardless of whatever clients you are using (mobile, desktop, browser...). DO NOT use the official Bitwarden support channels.**
+| Feature | How it works |
+|---------|-------------|
+| ARM64 binary build | Natively compiled on `ubuntu-22.04-arm` runner |
+| Auto-sync with upstream | Checks for new tags daily and pushes them to the fork |
+| Automated releases | Tag push → GitHub Actions → assets uploaded to GitHub Releases |
+| EC2 auto-update | cron runs `update.sh`, pulls the latest release automatically |
 
-<br>
+---
 
-## Features
+## Setup
 
-A nearly complete implementation of the Bitwarden Client API is provided, including:
+### 1. Fork the repository
 
- * [Personal Vault](https://bitwarden.com/help/managing-items/)
- * [Send](https://bitwarden.com/help/about-send/)
- * [Attachments](https://bitwarden.com/help/attachments/)
- * [Website icons](https://bitwarden.com/help/website-icons/)
- * [Personal API Key](https://bitwarden.com/help/personal-api-key/)
- * [Organizations](https://bitwarden.com/help/getting-started-organizations/)
-   - [Collections](https://bitwarden.com/help/about-collections/),
-     [Password Sharing](https://bitwarden.com/help/sharing/),
-     [Member Roles](https://bitwarden.com/help/user-types-access-control/),
-     [Groups](https://bitwarden.com/help/about-groups/),
-     [Event Logs](https://bitwarden.com/help/event-logs/),
-     [Admin Password Reset](https://bitwarden.com/help/admin-reset/),
-     [Directory Connector](https://bitwarden.com/help/directory-sync/),
-     [Policies](https://bitwarden.com/help/policies/)
- * [Multi/Two Factor Authentication](https://bitwarden.com/help/bitwarden-field-guide-two-step-login/)
-   - [Authenticator](https://bitwarden.com/help/setup-two-step-login-authenticator/),
-     [Email](https://bitwarden.com/help/setup-two-step-login-email/),
-     [FIDO2 WebAuthn](https://bitwarden.com/help/setup-two-step-login-fido/),
-     [YubiKey](https://bitwarden.com/help/setup-two-step-login-yubikey/),
-     [Duo](https://bitwarden.com/help/setup-two-step-login-duo/)
- * [Emergency Access](https://bitwarden.com/help/emergency-access/)
- * [Vaultwarden Admin Backend](https://github.com/dani-garcia/vaultwarden/wiki/Enabling-admin-page)
- * [Modified Web Vault client](https://github.com/dani-garcia/bw_web_builds) (Bundled within our containers)
+Fork [dani-garcia/vaultwarden](https://github.com/dani-garcia/vaultwarden) on GitHub.
 
-<br>
+### 2. Copy workflow and script files into your fork
 
-## Usage
-
-> [!IMPORTANT]
-> The web-vault requires the use a secure context for the [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API).
-> That means it will only work via `http://localhost:8000` (using the port from the example below) or if you [enable HTTPS](https://github.com/dani-garcia/vaultwarden/wiki/Enabling-HTTPS).
-
-The recommended way to install and use Vaultwarden is via our container images which are published to [ghcr.io](https://github.com/dani-garcia/vaultwarden/pkgs/container/vaultwarden), [docker.io](https://hub.docker.com/r/vaultwarden/server) and [quay.io](https://quay.io/repository/vaultwarden/server).
-See [which container image to use](https://github.com/dani-garcia/vaultwarden/wiki/Which-container-image-to-use) for an explanation of the provided tags.
-
-There are also [community driven packages](https://github.com/dani-garcia/vaultwarden/wiki/Third-party-packages) which can be used, but those might be lagging behind the latest version or might deviate in the way Vaultwarden is configured, as described in our [Wiki](https://github.com/dani-garcia/vaultwarden/wiki).
-
-Alternatively, you can also [build Vaultwarden](https://github.com/dani-garcia/vaultwarden/wiki/Building-binary) yourself.
-
-While Vaultwarden is based upon the [Rocket web framework](https://rocket.rs) which has built-in support for TLS our recommendation would be that you setup a reverse proxy (see [proxy examples](https://github.com/dani-garcia/vaultwarden/wiki/Proxy-examples)).
-
-> [!TIP]
->**For more detailed examples on how to install, use and configure Vaultwarden you can check our [Wiki](https://github.com/dani-garcia/vaultwarden/wiki).**
-
-### Docker/Podman CLI
-
-Pull the container image and mount a volume from the host for persistent storage.<br>
-You can replace `docker` with `podman` if you prefer to use podman.
-
-```shell
-docker pull vaultwarden/server:latest
-docker run --detach --name vaultwarden \
-  --env DOMAIN="https://vw.domain.tld" \
-  --volume /vw-data/:/data/ \
-  --restart unless-stopped \
-  --publish 127.0.0.1:8000:80 \
-  vaultwarden/server:latest
+```
+.github/workflows/build-release.yml   ← ARM64 build & release
+.github/workflows/sync-upstream.yml   ← upstream auto-sync
+scripts/setup.sh                       ← EC2 initial setup
+scripts/update.sh                      ← EC2 auto-update
+scripts/vaultwarden.service            ← systemd unit file
 ```
 
-This will preserve any persistent data under `/vw-data/`, you can adapt the path to whatever suits you.
+### 3. Create and register a PAT (Personal Access Token)
 
-### Docker Compose
+`sync-upstream.yml` pushes tags to trigger `build-release.yml`.
+This requires a PAT — `GITHUB_TOKEN` cannot trigger other workflows by design.
 
-To use Docker compose you need to create a `compose.yaml` which will hold the configuration to run the Vaultwarden container.
+1. GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
+2. Grant: **Contents: Read & Write**, **Workflows: Read & Write**
+3. In your fork: Settings → Secrets and variables → Actions
+4. Add a secret named `SYNC_TOKEN` with the PAT value
 
-```yaml
-services:
-  vaultwarden:
-    image: vaultwarden/server:latest
-    container_name: vaultwarden
-    restart: unless-stopped
-    environment:
-      DOMAIN: "https://vw.domain.tld"
-    volumes:
-      - ./vw-data/:/data/
-    ports:
-      - 127.0.0.1:8000:80
+### 4. Enable Actions
+
+In your fork: Actions tab → "I understand my workflows, go ahead and enable them"
+
+### 5. Trigger the first build
+
+Actions → **Build and Release (ARM64)** → Run workflow → enter a tag (e.g. `v1.32.0`).
+
+Alternatively, push upstream tags to your fork and the build will start automatically:
+
+```bash
+git remote add upstream https://github.com/dani-garcia/vaultwarden.git
+git fetch upstream --tags
+git push origin --tags
 ```
 
-<br>
+---
 
-## Get in touch
+## EC2 Setup
 
-Have a question, suggestion or need help? Join our community on [Matrix](https://matrix.to/#/#vaultwarden:matrix.org), [GitHub Discussions](https://github.com/dani-garcia/vaultwarden/discussions) or [Discourse Forums](https://vaultwarden.discourse.group/).
+### Prerequisites
 
-Encountered a bug or crash? Please search our issue tracker and discussions to see if it's already been reported. If not, please [start a new discussion](https://github.com/dani-garcia/vaultwarden/discussions) or [create a new issue](https://github.com/dani-garcia/vaultwarden/issues/). Ensure you're using the latest version of Vaultwarden and there aren't any similar issues open or closed!
+- AWS t4g instance (Ubuntu 22.04 or 24.04 recommended)
+- An HTTPS reverse proxy (nginx or Caddy) configured separately
+- Vaultwarden listens on port 8080 (HTTP) on localhost
 
-<br>
+### Install
 
-## Contributors
+```bash
+export GITHUB_REPO="YOUR_USERNAME/vaultwarden"
 
-Thanks for your contribution to the project!
+curl -sL \
+  "https://raw.githubusercontent.com/${GITHUB_REPO}/main/scripts/setup.sh" \
+  | sudo GITHUB_REPO="${GITHUB_REPO}" bash
+```
 
-[![Contributors Count](https://img.shields.io/github/contributors-anon/dani-garcia/vaultwarden?style=for-the-badge&logo=vaultwarden&color=005AA4)](https://github.com/dani-garcia/vaultwarden/graphs/contributors)<br>
-[![Contributors Avatars](https://contributors-img.web.app/image?repo=dani-garcia/vaultwarden)](https://github.com/dani-garcia/vaultwarden/graphs/contributors)
+This single command will:
 
-<br>
+- Place the binary and web vault under `/opt/vaultwarden/`
+- Generate a config file at `/etc/vaultwarden/vaultwarden.env`
+- Create the data directory at `/var/lib/vaultwarden/`
+- Enable and start the systemd service
+- Set up a daily cron job at 03:00 for automatic updates
 
-## Disclaimer
+### Required: edit the config file
 
-**This project is not associated with [Bitwarden](https://bitwarden.com/) or Bitwarden, Inc.**
+```bash
+sudo nano /etc/vaultwarden/vaultwarden.env
+```
 
-However, one of the active maintainers for Vaultwarden is employed by Bitwarden and is allowed to contribute to the project on their own time. These contributions are independent of Bitwarden and are reviewed by other maintainers.
+Minimum changes required:
 
-The maintainers work together to set the direction for the project, focusing on serving the self-hosting community, including individuals, families, and small organizations, while ensuring the project's sustainability.
+```env
+DOMAIN=https://vaultwarden.example.com   # set your actual domain
+ADMIN_TOKEN=<replace with a secure password>
+```
 
-**Please note:** We cannot be held liable for any data loss that may occur while using Vaultwarden. This includes passwords, attachments, and other information handled by the application. We highly recommend performing regular backups of your files and database. However, should you experience data loss, we encourage you to contact us immediately.
+Then restart:
 
-<br>
+```bash
+sudo systemctl restart vaultwarden
+sudo systemctl status vaultwarden
+```
 
-## Bitwarden_RS
+---
 
-This project was known as Bitwarden_RS and has been renamed to separate itself from the official Bitwarden server in the hopes of avoiding confusion and trademark/branding issues.<br>
-Please see [#1642 - v1.21.0 release and project rename to Vaultwarden](https://github.com/dani-garcia/vaultwarden/discussions/1642) for more explanation.
+## Manual update
+
+```bash
+sudo GITHUB_REPO="YOUR_USERNAME/vaultwarden" /usr/local/bin/vaultwarden-update
+```
+
+---
+
+## nginx reverse proxy example
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name vaultwarden.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/vaultwarden.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/vaultwarden.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # WebSocket (real-time notifications)
+    location /notifications/hub {
+        proxy_pass http://127.0.0.1:3012;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    location /notifications/hub/negotiate {
+        proxy_pass http://127.0.0.1:8080;
+    }
+}
+
+server {
+    listen 80;
+    server_name vaultwarden.example.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+---
+
+## Directory layout
+
+```
+/opt/vaultwarden/
+├── vaultwarden          # binary
+├── web-vault/           # web UI
+└── .version             # currently installed version
+
+/etc/vaultwarden/
+└── vaultwarden.env      # config file (mode 600)
+
+/var/lib/vaultwarden/
+└── db.sqlite3           # database — back this up
+
+/var/log/vaultwarden/
+├── vaultwarden.log      # application log
+└── update.log           # auto-update log
+```
+
+---
+
+## Backup
+
+Backing up the SQLite database is all you need:
+
+```bash
+# Example: back up to S3 (add to cron)
+sqlite3 /var/lib/vaultwarden/db.sqlite3 ".backup /tmp/vw-backup.sqlite3"
+aws s3 cp /tmp/vw-backup.sqlite3 s3://your-bucket/vaultwarden/$(date +%Y%m%d).sqlite3
+rm /tmp/vw-backup.sqlite3
+```
+
+---
+
+## License
+
+Follows the upstream [vaultwarden](https://github.com/dani-garcia/vaultwarden) license (AGPL-3.0).

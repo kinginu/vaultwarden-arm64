@@ -1,0 +1,46 @@
+[Unit]
+Description=Vaultwarden Password Manager (ARM64)
+Documentation=https://github.com/dani-garcia/vaultwarden
+After=network.target
+Wants=network-online.target
+
+[Service]
+# 実行ユーザー
+User=vaultwarden
+Group=vaultwarden
+
+# バイナリと設定
+ExecStart=/opt/vaultwarden/vaultwarden
+EnvironmentFile=/etc/vaultwarden/vaultwarden.env
+WorkingDirectory=/opt/vaultwarden
+
+# 再起動ポリシー
+Restart=on-failure
+RestartSec=10s
+TimeoutStopSec=30s
+
+# セキュリティ強化
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/vaultwarden /var/log/vaultwarden
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=false  # Rust バイナリは JIT を使わないが念のため false
+
+# リソース制限 (t4g.nano 向け調整)
+MemoryMax=400M
+CPUQuota=90%
+
+# ログ
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vaultwarden
+
+[Install]
+WantedBy=multi-user.target

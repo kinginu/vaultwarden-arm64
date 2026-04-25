@@ -1,0 +1,108 @@
+name: Build and Release (ARM64)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'ビルドするタグ (例: v1.32.0)'
+        required: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ARM64 binary
+    runs-on: ubuntu-22.04-arm   # GitHub ARM64 runner (aarch64 native)
+    permissions:
+      contents: write
+
+    steps:
+      - name: Determine ref
+        id: ref
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "ref=refs/tags/${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "ref=${GITHUB_REF}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ref.outputs.ref }}
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libssl-dev pkg-config
+
+      - name: Build vaultwarden (release, sqlite)
+        run: cargo build --release --features sqlite
+
+      - name: Strip binary
+        run: strip target/release/vaultwarden
+
+      - name: Fetch web vault
+        id: webvault
+        run: |
+          # bw_web_builds の最新リリースを取得
+          WV_TAG=$(curl -sf https://api.github.com/repos/dani-garcia/bw_web_builds/releases/latest \
+                   | jq -r '.tag_name')
+          echo "web_vault_tag=${WV_TAG}" >> "$GITHUB_OUTPUT"
+          curl -sL \
+            "https://github.com/dani-garcia/bw_web_builds/releases/download/${WV_TAG}/bw_web_${WV_TAG}.tar.gz" \
+            -o "bw_web_${WV_TAG}.tar.gz"
+
+      - name: Package binary
+        run: |
+          TAG="${{ steps.ref.outputs.tag }}"
+          mkdir -p dist
+          cp target/release/vaultwarden dist/
+          # バイナリ単体 tarball
+          tar -czf "dist/vaultwarden-${TAG}-aarch64-linux.tar.gz" \
+            -C dist vaultwarden
+          # チェックサム
+          sha256sum "dist/vaultwarden-${TAG}-aarch64-linux.tar.gz" \
+            > "dist/vaultwarden-${TAG}-aarch64-linux.tar.gz.sha256"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ref.outputs.tag }}
+          name: "Vaultwarden ${{ steps.ref.outputs.tag }} — ARM64"
+          body: |
+            ## ARM64 (aarch64) ビルド
+
+            AWS t4g / Graviton 向け非公式ビルドです。
+            upstream: https://github.com/dani-garcia/vaultwarden/releases/tag/${{ steps.ref.outputs.tag }}
+
+            ### Web vault
+            `bw_web_${{ steps.webvault.outputs.web_vault_tag }}.tar.gz` を同梱しています。
+            EC2 の `/opt/vaultwarden/web-vault/` に展開してください。
+
+            ### インストール / 更新
+            ```bash
+            curl -sL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/update.sh | sudo bash
+            ```
+
+            > このリリースは GitHub Actions により自動生成されました。
+          files: |
+            dist/vaultwarden-${{ steps.ref.outputs.tag }}-aarch64-linux.tar.gz
+            dist/vaultwarden-${{ steps.ref.outputs.tag }}-aarch64-linux.tar.gz.sha256
+            bw_web_${{ steps.webvault.outputs.web_vault_tag }}.tar.gz
+          draft: false
+          prerelease: false
