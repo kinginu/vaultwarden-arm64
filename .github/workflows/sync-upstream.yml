@@ -33,14 +33,12 @@ jobs:
       - name: Fetch upstream (tags included)
         run: git fetch upstream --tags --prune --prune-tags
 
-      - name: Sync default branch
-        run: |
-          DEFAULT_BRANCH=$(git remote show upstream | awk '/HEAD branch/ {print $NF}')
-          echo "Syncing branch: ${DEFAULT_BRANCH}"
-          git checkout "${DEFAULT_BRANCH}"
-          git merge "upstream/${DEFAULT_BRANCH}" --ff-only \
-            || { echo "Fast-forward failed, trying rebase"; git rebase "upstream/${DEFAULT_BRANCH}"; }
-          git push origin "${DEFAULT_BRANCH}"
+      # NOTE: We intentionally do NOT sync the default branch from upstream.
+      # This fork carries its own commits on main (ARM64 build pipeline,
+      # scripts/, customised README), which always conflict with upstream's
+      # changes on the same files (README.md) during rebase. Builds are driven
+      # purely by tags (see build-release.yml), so the fork's main content is
+      # irrelevant to which version gets built. Only tag propagation matters.
 
       - name: Push new upstream tags (triggers build-release workflow)
         run: |
