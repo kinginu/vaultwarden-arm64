@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write   # required to dispatch build-release.yml
 
     steps:
       - name: Checkout fork (full history)
@@ -40,7 +41,7 @@ jobs:
       # purely by tags (see build-release.yml), so the fork's main content is
       # irrelevant to which version gets built. Only tag propagation matters.
 
-      - name: Push new upstream tags (triggers build-release workflow)
+      - name: Detect and push new upstream tags
         run: |
           # vaultwarden tags have no 'v' prefix (e.g. 1.35.7)
           UPSTREAM_TAGS=$(git ls-remote --tags upstream 'refs/tags/[0-9]*' \
@@ -69,7 +70,27 @@ jobs:
           echo "New tags to push: ${NEW_TAGS[*]}"
           for tag in "${NEW_TAGS[@]}"; do
             echo "  Pushing tag: ${tag}"
+            # The tag points at an upstream commit whose tree does NOT contain
+            # build-release.yml, so a tag push alone cannot trigger the ARM64
+            # build. The tag is still pushed so the release can attach to it and
+            # build-release can check it out.
             git push origin "refs/tags/${tag}"
+          done
+
+          # Hand the list to the next step (bash arrays don't cross steps).
+          echo "NEW_TAGS=${NEW_TAGS[*]}" >> "$GITHUB_ENV"
+
+      - name: Dispatch ARM64 build for new tags
+        if: env.NEW_TAGS != ''
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: |
+          for tag in ${NEW_TAGS}; do
+            echo "Dispatching build-release.yml for ${tag}"
+            gh workflow run build-release.yml \
+              --repo "${GITHUB_REPOSITORY}" \
+              --ref main \
+              -f tag="${tag}"
           done
 
       - name: Summary
